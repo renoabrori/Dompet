@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOMPETDR - Financial RPG HUD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        game: ['Rajdhani', 'sans-serif'],
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        cinzel: ['Cinzel', 'serif']
+                    },
+                    colors: {
+                        cyber: {
+                            dark: '#080c14',
+                            card: 'rgba(15, 23, 42, 0.85)',
+                            border: 'rgba(56, 189, 248, 0.25)',
+                            gold: '#fbbf24',
+                            goldGlow: '#f59e0b',
+                            mana: '#10b981',
+                            damage: '#f43f5e',
+                            neon: '#00f2fe'
+                        }
+                    },
+                    boxShadow: {
+                        'neon-gold': '0 0 20px rgba(251, 191, 36, 0.35)',
+                        'neon-mana': '0 0 20px rgba(16, 185, 129, 0.35)',
+                        'neon-damage': '0 0 20px rgba(244, 63, 94, 0.35)',
+                        'neon-cyan': '0 0 20px rgba(0, 242, 254, 0.35)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #06090e;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar styled for game log */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d131f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
+        }
+
+        /* Cinematic HUD Glow Border & Glassmorphism */
+        .hud-panel {
+            background: rgba(13, 19, 33, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 1px 1px rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .hud-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 8px; height: 8px;
+            border-top: 2px solid #38bdf8;
+            border-left: 2px solid #38bdf8;
+        }
+
+        .hud-panel::after {
+            content: '';
+            position: absolute;
+            bottom: 0; right: 0; width: 8px; height: 8px;
+            border-bottom: 2px solid #38bdf8;
+            border-right: 2px solid #38bdf8;
+        }
+
+        .hud-button {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hud-button:hover {
+            border-color: #00f2fe;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .hud-button:active {
+            transform: translateY(1px);
+        }
+
+        /* Scanline Overlay for retro cinema screen feeling */
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            z-index: 40;
+            pointer-events: none;
+            opacity: 0.35;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.6)); }
+            50% { filter: drop-shadow(0 0 18px rgba(251, 191, 36, 0.9)); }
+        }
+
+        .gold-pulse {
+            animation: pulseGlow 2.5s infinite;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col relative selection:bg-cyan-500 selection:text-black">
+
+    <!-- Canvas Interactive Starfield Background -->
+    <canvas id="bgCanvas" class="fixed inset-0 pointer-events-none z-0 opacity-40"></canvas>
+    
+    <!-- Cinematic CRT Scanline Effect -->
+    <div class="scanline"></div>
+
+    <!-- Top Game HUD Bar / Header -->
+    <header class="relative z-10 hud-panel border-b border-cyan-500/20 py-3 px-4 sm:px-8">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            
+            <!-- Logo & Brand -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center text-cyan-400 gold-pulse">
+                    <i class="fa-solid fa-gem text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black font-orbitron tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-amber-400">
+                        DOMPET<span class="text-amber-400">DR</span>
+                    </h1>
+                    <p class="text-[10px] font-game tracking-widest text-cyan-400/70 uppercase">Financial RPG Command Center</p>
+                </div>
+            </div>
+
+            <!-- Player Status & Audio Controls -->
+            <div class="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                
+                <!-- Cloud Realtime Status Indicator -->
+                <div class="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-lg border border-cyan-500/30 text-xs font-game">
+                    <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="cloudStatusText" class="text-cyan-300 font-bold font-orbitron text-[10px]">CONNECTING CLOUD...</span>
+                </div>
+
+                <!-- Player Level Badge -->
+                <div class="flex items-center gap-3 bg-slate-900/90 px-3.5 py-1.5 rounded-lg border border-slate-700/60">
+                    <div class="text-right">
+                        <div class="text-[10px] uppercase font-game text-slate-400 tracking-wider">RANK PLAYER</div>
+                        <div class="text-xs font-bold font-orbitron text-amber-400" id="playerTitle">Novice Saver</div>
+                    </div>
+                    <div class="w-9 h-9 rounded-md bg-amber-500/10 border border-amber-500/40 flex items-center justify-center font-orbitron font-bold text-amber-400 text-sm shadow-neon-gold" id="playerLevelBadge">
+                        LV1
+                    </div>
+                </div>
+
+                <!-- Mute / Unmute Audio Toggle -->
+                <button id="btnAudioToggle" class="hud-button p-2.5 rounded-lg text-cyan-400 hover:text-cyan-200 text-sm flex items-center justify-center" title="Toggle Sound FX">
+                    <i class="fa-solid fa-volume-high text-base" id="audioIcon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="relative z-10 flex-grow max-w-6xl mx-auto px-4 py-6 w-full flex flex-col gap-6">
+
+        <!-- Top Stats Row: HUD Gauges -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <!-- TOTAL GOLD / SALDO CARD -->
+            <div class="hud-panel rounded-xl p-5 border-amber-500/30 bg-gradient-to-br from-amber-950/20 via-slate-900/80 to-slate-950/90 hover:border-amber-400/60 transition-all group">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-game tracking-widest text-amber-400 uppercase font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-coins text-amber-400"></i> TOTAL GOLD (SALDO)
+                    </span>
+                    <span class="text-[10px] font-orbitron px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">VAULT</span>
+                </div>
+                <div class="text-3xl font-black font-orbitron text-amber-300 tracking-tight my-1 truncate gold-pulse" id="totalSaldo">
+                    Rp 0
+                </div>
+                
+                <!-- Financial HP Health Bar -->
+                <div class="mt-3">
+                    <div class="flex justify-between text-[10px] font-game text-slate-400 mb-1">
+                        <span>FINANCIAL STABILITY (HP)</span>
+                        <span id="hpPercentage" class="text-cyan-400 font-bold">100%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50 p-0.5">
+                        <div id="hpBar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-all duration-500 w-full"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MANA GAIN / PEMASUKAN CARD -->
+            <div class="hud-panel rounded-xl p-5 border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-slate-900/80 to-slate-950/90 hover:border-emerald-400/60 transition-all">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-game tracking-widest text-emerald-400 uppercase font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-bolt text-emerald-400"></i> MANA GAIN (PEMASUKAN)
+                    </span>
+                    <span class="text-[10px] font-orbitron px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">INFLOW</span>
+                </div>
+                <div class="text-2xl font-bold font-orbitron text-emerald-400 tracking-tight my-1 truncate" id="totalPemasukan">
+                    Rp 0
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-arrow-trend-up text-emerald-400"></i> Sumber energi bulan ini
+                </p>
+            </div>
+
+            <!-- DAMAGE TAKEN / PENGELUARAN CARD -->
+            <div class="hud-panel rounded-xl p-5 border-rose-500/30 bg-gradient-to-br from-rose-950/20 via-slate-900/80 to-slate-950/90 hover:border-rose-400/60 transition-all">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-game tracking-widest text-rose-400 uppercase font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-skull text-rose-400"></i> DAMAGE DRAIN (PENGELUARAN)
+                    </span>
+                    <span class="text-[10px] font-orbitron px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">OUTFLOW</span>
+                </div>
+                <div class="text-2xl font-bold font-orbitron text-rose-400 tracking-tight my-1 truncate" id="totalPengeluaran">
+                    Rp 0
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-shield-halved text-rose-400"></i> Beban konsumsi bulan ini
+                </p>
+            </div>
+        </section>
+
+        <!-- Main Workspace: Left Form, Right Quest Log -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- LEFT SECTION: FORGE TRANSACTION FORM (4 Cols) -->
+            <section class="lg:col-span-5">
+                <div class="hud-panel rounded-xl p-6 border-cyan-500/30 sticky top-6">
+                    
+                    <div class="flex items-center justify-between mb-5 border-b border-slate-700/50 pb-3">
+                        <h2 class="text-base font-orbitron font-bold text-cyan-300 flex items-center gap-2">
+                            <i class="fa-solid fa-anvil text-cyan-400"></i> FORGE TRANSAKSI
+                        </h2>
+                        <span class="text-[10px] font-game text-slate-400 uppercase tracking-widest bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">Action Menu</span>
+                    </div>
+
+                    <form id="transaksiForm" class="space-y-4">
+                        
+                        <!-- Transaksi Type Selection Buttons -->
+                        <div>
+                            <label class="block text-xs font-game text-slate-300 tracking-wider uppercase mb-1.5">Tipe Transaksi</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="jenis" value="pemasukan" class="peer sr-only" checked>
+                                    <div class="hud-button rounded-lg px-3 py-2 text-center text-xs font-bold font-orbitron text-slate-400 peer-checked:bg-emerald-950/80 peer-checked:border-emerald-400 peer-checked:text-emerald-300 peer-checked:shadow-neon-mana">
+                                        <i class="fa-solid fa-plus-circle mr-1"></i> MANA (IN)
+                                    </div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="jenis" value="pengeluaran" class="peer sr-only">
+                                    <div class="hud-button rounded-lg px-3 py-2 text-center text-xs font-bold font-orbitron text-slate-400 peer-checked:bg-rose-950/80 peer-checked:border-rose-400 peer-checked:text-rose-300 peer-checked:shadow-neon-damage">
+                                        <i class="fa-solid fa-minus-circle mr-1"></i> DAMAGE (OUT)
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Dropdown Kategori -->
+                        <div>
+                            <label for="keterangan" class="block text-xs font-game text-slate-300 tracking-wider uppercase mb-1.5">Kategori Loot / Item</label>
+                            <div class="relative">
+                                <select id="keterangan" required 
+                                    class="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg px-3 py-2 text-sm text-cyan-100 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all appearance-none cursor-pointer">
+                                </select>
+                                <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-cyan-400">
+                                    <i class="fa-solid fa-caret-down text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Catatan Tambahan (Opsional) -->
+                        <div>
+                            <label for="catatan" class="block text-xs font-game text-slate-300 tracking-wider uppercase mb-1.5">Catatan Tambahan <span class="text-slate-500 lowercase">(opsional)</span></label>
+                            <input type="text" id="catatan" placeholder="E.g. Ramuan Kopi, Bensin Motor Cyber" 
+                                class="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all">
+                        </div>
+
+                        <!-- Amount Input -->
+                        <div>
+                            <label for="jumlah" class="block text-xs font-game text-slate-300 tracking-wider uppercase mb-1.5">Jumlah Gold (Rp)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-amber-400 font-bold font-orbitron text-xs">
+                                    RP
+                                </div>
+                                <input type="number" id="jumlah" required min="1" placeholder="0" 
+                                    class="w-full pl-10 px-3 py-2 bg-slate-900/90 border border-slate-700/80 rounded-lg text-amber-300 font-orbitron font-bold text-base focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all placeholder-slate-700">
+                            </div>
+                        </div>
+                        
+                        <!-- Date Input -->
+                        <div>
+                            <label for="tanggal" class="block text-xs font-game text-slate-300 tracking-wider uppercase mb-1.5">Waktu Transaksi</label>
+                            <input type="date" id="tanggal" required 
+                                class="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all">
+                        </div>
+
+                        <!-- Submit Action Button -->
+                        <button type="submit" id="btnSubmit"
+                            class="w-full hud-button bg-gradient-to-r from-cyan-600 via-teal-600 to-cyan-500 text-white font-orbitron font-bold py-3 px-4 rounded-lg shadow-neon-cyan text-sm tracking-wider uppercase flex items-center justify-center gap-2 mt-4 hover:brightness-110">
+                            <i class="fa-solid fa-scroll"></i> Simpan Ke Quest Log
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- RIGHT SECTION: QUEST LOG / TRANSACTION HISTORY (7 Cols) -->
+            <section class="lg:col-span-7">
+                <div class="hud-panel rounded-xl p-6 border-cyan-500/30 flex flex-col h-full min-h-[520px]">
+                    
+                    <!-- Quest Log Header -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-700/50 pb-3">
+                        <div>
+                            <h2 class="text-base font-orbitron font-bold text-cyan-300 flex items-center gap-2">
+                                <i class="fa-solid fa-book-bookmark text-cyan-400"></i> QUEST LOG & HISTORY
+                            </h2>
+                            <p class="text-xs font-game text-slate-400">Rekam Jejak Finansial Petualang</p>
+                        </div>
+                        <div class="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+                            <button id="btnOpenSpreadsheet" class="text-xs font-orbitron text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 border border-emerald-700/60 px-2.5 py-1 rounded transition-all hover:border-emerald-400 flex items-center gap-1.5 shadow-neon-mana" title="Buka Mode Spreadsheet Grid">
+                                <i class="fa-solid fa-file-excel text-sm"></i> SPREADSHEET
+                            </button>
+                            <button id="btnHapusSemua" class="text-xs font-orbitron text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1.5 hidden bg-rose-950/40 border border-rose-800/50 px-2.5 py-1 rounded transition-colors">
+                                <i class="fa-solid fa-trash-can"></i> CLEAR LOG
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search and Filter Bar -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <!-- Search Box -->
+                        <div class="relative">
+                            <input type="text" id="searchInput" placeholder="Cari quest / catatan..." 
+                                class="w-full bg-slate-900/80 border border-slate-700/70 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-all">
+                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-xs text-slate-500"></i>
+                        </div>
+                        
+                        <!-- Type Filter -->
+                        <div class="flex gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-700/70 text-xs font-game">
+                            <button id="filterAll" class="filter-btn flex-1 py-1 rounded text-center text-cyan-300 bg-cyan-950/80 border border-cyan-700/60 font-bold">SEMUA</button>
+                            <button id="filterIn" class="filter-btn flex-1 py-1 rounded text-center text-slate-400 hover:text-emerald-300">MANA</button>
+                            <button id="filterOut" class="filter-btn flex-1 py-1 rounded text-center text-slate-400 hover:text-rose-300">DAMAGE</button>
+                        </div>
+                    </div>
+
+                    <!-- Log List Container -->
+                    <div id="listTransaksiContainer" class="flex-grow overflow-y-auto pr-1 max-h-[440px]">
+                        
+                        <!-- Empty State -->
+                        <div id="emptyState" class="text-center py-16 flex flex-col items-center justify-center text-slate-500">
+                            <div class="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 text-2xl mb-3">
+                                <i class="fa-solid fa-shield-cat"></i>
+                            </div>
+                            <p class="font-orbitron text-sm text-slate-400">LOG PETUALANGAN KOSONG</p>
+                            <p class="text-xs font-game text-slate-500 mt-1">Belum ada transaksi tercatat dalam jurnal.</p>
+                        </div>
+                        
+                        <!-- Transaction Items List -->
+                        <ul id="listTransaksi" class="space-y-2.5 hidden">
+                            <!-- Items injected dynamically via JS -->
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- BOTTOM ACHIEVEMENTS SECTION -->
+        <section class="hud-panel rounded-xl p-5 border-amber-500/20">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-700/40 pb-2">
+                <h3 class="text-xs font-orbitron font-bold text-amber-400 flex items-center gap-2">
+                    <i class="fa-solid fa-trophy"></i> FINANCIAL ACHIEVEMENTS UNLOCKED
+                </h3>
+                <span class="text-[10px] font-game text-slate-400">Sistem Pencapaian Game</span>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center" id="achievementGrid">
+                <!-- Achievement Badges rendered via JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 hud-panel border-t border-cyan-500/20 py-4 mt-auto">
+        <div class="max-w-6xl mx-auto px-4 text-center text-xs font-game text-slate-500">
+            &copy; <span id="currentYear"></span> <span class="text-cyan-400 font-bold">DOMPETDR</span> RPG Edition • Cinematic Personal Finance Command
+        </div>
+    </footer>
+
+    <!-- Custom Cyber Delete Confirmation Modal -->
+    <div id="deleteModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center z-50 transition-opacity">
+        <div class="hud-panel border-rose-500/60 rounded-xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform" id="deleteModalContent">
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-500/50 text-rose-400 flex items-center justify-center mx-auto mb-4 text-xl shadow-neon-damage">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-base font-orbitron font-bold text-rose-300 mb-2" id="modalTitle">DISCARD QUEST DATA</h3>
+                <p class="text-xs font-game text-slate-300 mb-6" id="modalMessage">Apakah Anda yakin ingin menghapus data transaksi ini dari jurnal?</p>
+                
+                <div class="flex gap-3">
+                    <button id="btnCancelDelete" class="flex-1 hud-button py-2 px-4 rounded-lg text-xs font-orbitron text-slate-300 hover:text-white">
+                        BATAL
+                    </button>
+                    <button id="btnConfirmDelete" class="flex-1 hud-button bg-rose-950/80 border-rose-500/80 hover:bg-rose-900 text-rose-200 font-orbitron font-bold py-2 px-4 rounded-lg text-xs shadow-neon-damage">
+                        HAPUS
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spreadsheet Matrix & CSV Modal -->
+    <div id="spreadsheetModal" class="fixed inset-0 bg-black/85 backdrop-blur-md hidden flex items-center justify-center z-50 p-3 sm:p-6 transition-opacity">
+        <div class="hud-panel border-emerald-500/60 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden transform scale-95 transition-transform" id="spreadsheetModalContent">
+            
+            <!-- Modal Header -->
+            <div class="p-4 border-b border-slate-700/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-950/80">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 flex items-center justify-center text-xl shadow-neon-mana">
+                        <i class="fa-solid fa-table-cells"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-orbitron font-bold text-emerald-300 flex items-center gap-2">
+                            SPREADSHEET MATRIX VAULT
+                        </h3>
+                        <p class="text-xs font-game text-slate-400">Pusat Data Analisis & Export / Import Excel CSV</p>
+                    </div>
+                </div>
+
+                <!-- Action Toolbar -->
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                    <button id="btnExportCSV" class="hud-button bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:text-white text-xs font-orbitron px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-neon-mana">
+                        <i class="fa-solid fa-file-csv text-sm"></i> Export CSV
+                    </button>
+                    
+                    <label class="hud-button bg-cyan-950/80 border-cyan-500/60 text-cyan-300 hover:text-white text-xs font-orbitron px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow-neon-cyan">
+                        <i class="fa-solid fa-file-import text-sm"></i> Import CSV
+                        <input type="file" id="csvFileInput" accept=".csv" class="hidden">
+                    </label>
+
+                    <button id="btnDownloadTemplate" class="hud-button bg-slate-900 border-slate-700 text-slate-300 hover:text-white text-xs font-orbitron px-2.5 py-1.5 rounded-lg flex items-center gap-1" title="Unduh Format Template CSV">
+                        <i class="fa-solid fa-circle-info"></i> Template
+                    </button>
+
+                    <button id="btnCloseSpreadsheet" class="hud-button p-1.5 rounded-lg text-slate-400 hover:text-rose-400 text-base ml-2">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Formula Statistics Toolbar (Excel-like formula metrics) -->
+            <div class="bg-slate-900/90 border-b border-slate-800 p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-orbitron">
+                <div class="bg-slate-950/60 p-2 rounded border border-emerald-500/30">
+                    <span class="text-[10px] text-slate-500 block font-game uppercase">=SUM(Pemasukan)</span>
+                    <span id="formulaPemasukan" class="text-emerald-400 font-bold text-xs truncate block">Rp 0</span>
+                </div>
+                <div class="bg-slate-950/60 p-2 rounded border border-rose-500/30">
+                    <span class="text-[10px] text-slate-500 block font-game uppercase">=SUM(Pengeluaran)</span>
+                    <span id="formulaPengeluaran" class="text-rose-400 font-bold text-xs truncate block">Rp 0</span>
+                </div>
+                <div class="bg-slate-950/60 p-2 rounded border border-amber-500/30">
+                    <span class="text-[10px] text-slate-500 block font-game uppercase">=NET_BALANCE()</span>
+                    <span id="formulaNet" class="text-amber-300 font-bold text-xs truncate block">Rp 0</span>
+                </div>
+                <div class="bg-slate-950/60 p-2 rounded border border-cyan-500/30">
+                    <span class="text-[10px] text-slate-500 block font-game uppercase">=COUNTA(Entries)</span>
+                    <span id="formulaCount" class="text-cyan-400 font-bold text-xs truncate block">0 Baris Data</span>
+                </div>
+            </div>
+
+            <!-- Spreadsheet Data Grid Table Container -->
+            <div class="p-4 overflow-x-auto overflow-y-auto flex-grow max-h-[50vh]">
+                <table class="w-full text-left text-xs font-sans border-collapse">
+                    <thead class="sticky top-0 bg-slate-950 text-cyan-300 font-orbitron uppercase text-[11px] border-b border-cyan-500/40">
+                        <tr>
+                            <th class="p-2.5 w-12 text-center">#</th>
+                            <th class="p-2.5">Waktu / Tanggal</th>
+                            <th class="p-2.5">Tipe Vault</th>
+                            <th class="p-2.5">Kategori / Item</th>
+                            <th class="p-2.5">Catatan Tambahan</th>
+                            <th class="p-2.5 text-right">Jumlah Gold (Rp)</th>
+                            <th class="p-2.5 text-center w-16">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="spreadsheetTableBody" class="divide-y divide-slate-800/60 text-slate-300 font-game text-sm">
+                        <!-- Spreadsheet rows injected dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Footer status bar -->
+            <div class="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-[11px] font-game text-slate-400 flex-wrap gap-2">
+                <span id="spreadsheetStatusText" class="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> 
+                    Realtime Live Spreadsheet Active — Edit Sel & Tersimpan Otomatis
+                </span>
+                <span class="text-slate-500">Satu klik edit sel seperti Google Sheets / Excel</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic & Firebase Realtime Cloud Engine -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, addDoc, deleteDoc, updateDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // IndexedDB Offline Persistence Engine
+        const DB_NAME = 'DompetDR_RPG_DB';
+        const STORE_NAME = 'transactions';
+
+        const openLocalDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        };
+
+        const saveLocalTransaction = async (item) => {
+            try {
+                const db = await openLocalDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).put(item);
+            } catch (e) {
+                console.error('IndexedDB save error', e);
+            }
+        };
+
+        const loadLocalTransactions = async () => {
+            try {
+                const db = await openLocalDB();
+                return new Promise((resolve) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.getAll();
+                    request.onsuccess = () => resolve(request.result || []);
+                    request.onerror = () => resolve([]);
+                });
+            } catch (e) {
+                return [];
+            }
+        };
+
+        const deleteLocalTransaction = async (id) => {
+            try {
+                const db = await openLocalDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).delete(id);
+            } catch (e) {
+                console.error('IndexedDB delete error', e);
+            }
+        };
+
+        const clearLocalTransactions = async () => {
+            try {
+                const db = await openLocalDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).clear();
+            } catch (e) {
+                console.error('IndexedDB clear error', e);
+            }
+        };
+
+        // Web Audio API Synthesizer (No external audio files needed)
+        const AudioFX = (() => {
+            let audioCtx = null;
+            let enabled = true;
+
+            const init = () => {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            };
+
+            const play = (type) => {
+                if (!enabled) return;
+                try {
+                    init();
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    const now = audioCtx.currentTime;
+
+                    if (type === 'income') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(587.33, now);
+                        osc.frequency.setValueAtTime(880, now + 0.08);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                        osc.start(now);
+                        osc.stop(now + 0.3);
+                    } else if (type === 'expense') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(320, now);
+                        osc.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+                        osc.start(now);
+                        osc.stop(now + 0.18);
+                    } else if (type === 'click') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(440, now);
+                        gain.gain.setValueAtTime(0.1, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                        osc.start(now);
+                        osc.stop(now + 0.05);
+                    } else if (type === 'delete') {
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(220, now);
+                        osc.frequency.setValueAtTime(110, now + 0.08);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                        osc.start(now);
+                        osc.stop(now + 0.2);
+                    } else if (type === 'spreadsheet') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(523.25, now);
+                        osc.frequency.setValueAtTime(659.25, now + 0.06);
+                        osc.frequency.setValueAtTime(783.99, now + 0.12);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                        osc.start(now);
+                        osc.stop(now + 0.25);
+                    }
+                } catch (e) {
+                    console.log('Audio playback error');
+                }
+            };
+
+            const toggle = () => {
+                enabled = !enabled;
+                return enabled;
+            };
+
+            return { play, toggle, isEnabled: () => enabled };
+        })();
+
+        // Canvas Interactive Particles
+        const initCanvas = () => {
+            const canvas = document.getElementById('bgCanvas');
+            const ctx = canvas.getContext('2d');
+            let width = canvas.width = window.innerWidth;
+            let height = canvas.height = window.innerHeight;
+
+            window.addEventListener('resize', () => {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+            });
+
+            const particles = Array.from({ length: 45 }, () => ({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                radius: Math.random() * 1.8 + 0.5,
+                color: Math.random() > 0.5 ? '#38bdf8' : '#fbbf24',
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.4,
+                alpha: Math.random() * 0.6 + 0.2
+            }));
+
+            const animate = () => {
+                ctx.clearRect(0, 0, width, height);
+                particles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    if (p.x < 0) p.x = width;
+                    if (p.x > width) p.x = 0;
+                    if (p.y < 0) p.y = height;
+                    if (p.y > height) p.y = 0;
+
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fill();
+                });
+                requestAnimationFrame(animate);
+            };
+            animate();
+        };
+
+        let transaksiData = [];
+        let activeFilter = 'all';
+        let searchQuery = '';
+        let idToDelete = null;
+        let isDeleteAll = false;
+
+        // Firebase Cloud Variables
+        let app = null;
+        let db = null;
+        let auth = null;
+        let userId = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'dompetdr-rpg';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : { apiKey: "demo-key", authDomain: "demo.firebaseapp.com", projectId: "demo-project" };
+
+        const categoryIcons = {
+            'Gaji & Upah': 'fa-sack-dollar text-emerald-400',
+            'Bonus & Tunjangan': 'fa-gift text-amber-400',
+            'Usaha & Sampingan': 'fa-briefcase text-cyan-400',
+            'Investasi & Dividen': 'fa-chart-line text-teal-400',
+            'Transfer / Kiriman': 'fa-arrow-right-arrow-left text-blue-400',
+            'Hadiah & Hibah': 'fa-award text-yellow-300',
+            'Makanan & Minuman': 'fa-utensils text-rose-400',
+            'Belanja & Groceries': 'fa-cart-shopping text-pink-400',
+            'Transportasi & Bensin': 'fa-gas-pump text-orange-400',
+            'Tagihan & Utilitas': 'fa-file-invoice-dollar text-purple-400',
+            'Hiburan & Rekreasi': 'fa-gamepad text-indigo-400',
+            'Kesehatan & Medis': 'fa-notes-medical text-red-400',
+            'Pendidikan': 'fa-graduation-cap text-sky-400',
+            'Kebutuhan Rumah': 'fa-house text-emerald-300',
+            'Lain-lain': 'fa-box text-slate-400'
+        };
+
+        const opsiKategori = {
+            pemasukan: [
+                'Gaji & Upah',
+                'Bonus & Tunjangan',
+                'Usaha & Sampingan',
+                'Investasi & Dividen',
+                'Transfer / Kiriman',
+                'Hadiah & Hibah',
+                'Lain-lain'
+            ],
+            pengeluaran: [
+                'Makanan & Minuman',
+                'Belanja & Groceries',
+                'Transportasi & Bensin',
+                'Tagihan & Utilitas',
+                'Hiburan & Rekreasi',
+                'Kesehatan & Medis',
+                'Pendidikan',
+                'Kebutuhan Rumah',
+                'Lain-lain'
+            ]
+        };
+
+        // Elements
+        const selectKeterangan = document.getElementById('keterangan');
+        const radioJenis = document.querySelectorAll('input[name="jenis"]');
+        const form = document.getElementById('transaksiForm');
+        const listTransaksi = document.getElementById('listTransaksi');
+        const emptyState = document.getElementById('emptyState');
+        const elTotalSaldo = document.getElementById('totalSaldo');
+        const elTotalPemasukan = document.getElementById('totalPemasukan');
+        const elTotalPengeluaran = document.getElementById('totalPengeluaran');
+        const hpBar = document.getElementById('hpBar');
+        const hpPercentage = document.getElementById('hpPercentage');
+        const playerTitle = document.getElementById('playerTitle');
+        const playerLevelBadge = document.getElementById('playerLevelBadge');
+        const achievementGrid = document.getElementById('achievementGrid');
+        const btnHapusSemua = document.getElementById('btnHapusSemua');
+
+        // Modal Elements
+        const modal = document.getElementById('deleteModal');
+        const modalContent = document.getElementById('deleteModalContent');
+        const btnCancelDelete = document.getElementById('btnCancelDelete');
+        const btnConfirmDelete = document.getElementById('btnConfirmDelete');
+
+        const spreadsheetModal = document.getElementById('spreadsheetModal');
+        const spreadsheetModalContent = document.getElementById('spreadsheetModalContent');
+        const btnOpenSpreadsheet = document.getElementById('btnOpenSpreadsheet');
+        const btnCloseSpreadsheet = document.getElementById('btnCloseSpreadsheet');
+        const btnExportCSV = document.getElementById('btnExportCSV');
+        const csvFileInput = document.getElementById('csvFileInput');
+        const btnDownloadTemplate = document.getElementById('btnDownloadTemplate');
+        const spreadsheetTableBody = document.getElementById('spreadsheetTableBody');
+
+        const formatRupiah = (angka) => {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(angka);
+        };
+
+        const formatTanggal = (dateString) => {
+            const options = { day: 'numeric', month: 'short', year: 'numeric' };
+            return new Date(dateString).toLocaleDateString('id-ID', options);
+        };
+
+        const updateOpsiKategori = () => {
+            const jenisSelected = document.querySelector('input[name="jenis"]:checked').value;
+            selectKeterangan.innerHTML = '';
+            opsiKategori[jenisSelected].forEach(opsi => {
+                const opt = document.createElement('option');
+                opt.value = opsi;
+                opt.textContent = opsi;
+                selectKeterangan.appendChild(opt);
+            });
+        };
+
+        const calculateLevelAndHP = (pemasukan, pengeluaran, saldo) => {
+            const txCount = transaksiData.length;
+            let level = 1;
+            let title = 'Novice Saver';
+
+            if (saldo >= 50000000) { level = 10; title = 'Financial Archmage'; }
+            else if (saldo >= 20000000) { level = 8; title = 'Sultan Keuangan'; }
+            else if (saldo >= 10000000) { level = 6; title = 'Wealth Guardian'; }
+            else if (saldo >= 5000000) { level = 4; title = 'Ksatria Tabungan'; }
+            else if (saldo >= 1000000) { level = 2; title = 'Pengembara Hemat'; }
+            else if (txCount > 0) { level = 1; title = 'Pencatat Pemula'; }
+
+            playerLevelBadge.textContent = `LV${level}`;
+            playerTitle.textContent = title;
+
+            let hp = 100;
+            if (pemasukan > 0) {
+                const ratio = Math.max(0, (saldo / pemasukan));
+                hp = Math.min(100, Math.round(ratio * 100));
+            } else if (pengeluaran > 0) {
+                hp = 0;
+            }
+
+            hpPercentage.textContent = `${hp}%`;
+            hpBar.style.width = `${hp}%`;
+
+            if (hp < 30) {
+                hpBar.className = "bg-gradient-to-r from-rose-600 to-red-500 h-full rounded-full transition-all duration-500";
+            } else if (hp < 70) {
+                hpBar.className = "bg-gradient-to-r from-amber-500 to-yellow-400 h-full rounded-full transition-all duration-500";
+            } else {
+                hpBar.className = "bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-all duration-500";
+            }
+        };
+
+        const renderAchievements = (pemasukan, pengeluaran, saldo) => {
+            const achievements = [
+                { name: 'First Quest', desc: 'Selesaikan 1 Transaksi', unlocked: transaksiData.length >= 1, icon: 'fa-scroll' },
+                { name: 'Gold Hoarder', desc: 'Saldo > Rp 1.000.000', unlocked: saldo >= 1000000, icon: 'fa-coins' },
+                { name: 'Mana Collector', desc: 'Pemasukan > Rp 5.000.000', unlocked: pemasukan >= 5000000, icon: 'fa-bolt' },
+                { name: 'Master Sultan', desc: 'Saldo > Rp 10.000.000', unlocked: saldo >= 10000000, icon: 'fa-crown' }
+            ];
+
+            achievementGrid.innerHTML = '';
+            achievements.forEach(ach => {
+                const badge = document.createElement('div');
+                badge.className = ach.unlocked
+                    ? 'p-2.5 rounded-lg bg-slate-900/90 border border-amber-500/50 text-amber-300 shadow-neon-gold flex flex-col items-center justify-center'
+                    : 'p-2.5 rounded-lg bg-slate-950/50 border border-slate-800 text-slate-600 flex flex-col items-center justify-center opacity-60';
+
+                badge.innerHTML = `
+                    <i class="fa-solid ${ach.icon} text-lg mb-1 ${ach.unlocked ? 'text-amber-400 gold-pulse' : 'text-slate-600'}"></i>
+                    <span class="font-orbitron font-bold text-[11px] leading-tight">${ach.name}</span>
+                    <span class="text-[9px] font-game text-slate-400 mt-0.5">${ach.desc}</span>
+                `;
+                achievementGrid.appendChild(badge);
+            });
+        };
+
+        const updateUI = () => {
+            let pemasukan = 0;
+            let pengeluaran = 0;
+
+            listTransaksi.innerHTML = '';
+
+            let filtered = transaksiData.filter(item => {
+                const matchesFilter = (activeFilter === 'all') ||
+                    (activeFilter === 'pemasukan' && item.jenis === 'pemasukan') ||
+                    (activeFilter === 'pengeluaran' && item.jenis === 'pengeluaran');
+
+                const matchesSearch = (item.keterangan && item.keterangan.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (item.catatan && item.catatan.toLowerCase().includes(searchQuery.toLowerCase()));
+
+                return matchesFilter && matchesSearch;
+            });
+
+            transaksiData.forEach(item => {
+                if (item.jenis === 'pemasukan') pemasukan += item.jumlah;
+                else pengeluaran += item.jumlah;
+            });
+
+            if (transaksiData.length === 0) {
+                emptyState.classList.remove('hidden');
+                listTransaksi.classList.add('hidden');
+                btnHapusSemua.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                listTransaksi.classList.remove('hidden');
+                btnHapusSemua.classList.remove('hidden');
+
+                const sortedData = [...filtered].sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+
+                sortedData.forEach(item => {
+                    const li = document.createElement('li');
+                    const isPemasukan = item.jenis === 'pemasukan';
+                    const sign = isPemasukan ? '+' : '-';
+                    const amountClass = isPemasukan ? 'text-emerald-400' : 'text-rose-400';
+                    const borderClass = isPemasukan ? 'border-emerald-500/20 hover:border-emerald-500/50' : 'border-rose-500/20 hover:border-rose-500/50';
+                    const iconName = categoryIcons[item.keterangan] || 'fa-coins text-cyan-400';
+
+                    const catatanDetail = item.catatan ? `<p class="text-[11px] text-slate-400 font-sans italic">${item.catatan}</p>` : '';
+
+                    li.className = `hud-panel p-3.5 rounded-xl border ${borderClass} transition-all flex items-center justify-between group`;
+                    li.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center justify-center shrink-0">
+                                <i class="fa-solid ${iconName} text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="font-orbitron font-bold text-xs text-slate-200">${item.keterangan}</p>
+                                ${catatanDetail}
+                                <p class="text-[10px] font-game text-slate-500 mt-0.5"><i class="fa-regular fa-clock mr-1"></i> ${formatTanggal(item.tanggal)}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <p class="font-orbitron font-bold text-sm ${amountClass} whitespace-nowrap">${sign} ${formatRupiah(item.jumlah)}</p>
+                            <button onclick="window.openDeleteModal('${item.id}')" class="text-slate-600 hover:text-rose-400 p-1.5 rounded hover:bg-rose-950/40 transition-colors opacity-80 group-hover:opacity-100" title="Discard">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </div>
+                    `;
+                    listTransaksi.appendChild(li);
+                });
+            }
+
+            const saldo = pemasukan - pengeluaran;
+            elTotalPemasukan.textContent = formatRupiah(pemasukan);
+            elTotalPengeluaran.textContent = formatRupiah(pengeluaran);
+            elTotalSaldo.textContent = formatRupiah(saldo);
+
+            calculateLevelAndHP(pemasukan, pengeluaran, saldo);
+            renderAchievements(pemasukan, pengeluaran, saldo);
+            
+            /* Update Spreadsheet Table if modal is open */
+            if (!spreadsheetModal.classList.contains('hidden')) {
+                renderSpreadsheetTable();
+            }
+        };
+
+        const renderSpreadsheetTable = () => {
+            spreadsheetTableBody.innerHTML = '';
+            let sumPemasukan = 0;
+            let sumPengeluaran = 0;
+
+            const sorted = [...transaksiData].sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+
+            if (sorted.length === 0) {
+                spreadsheetTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-10 text-slate-500 font-orbitron text-xs">
+                            <i class="fa-solid fa-table text-slate-600 text-2xl mb-2 block"></i>
+                            BELUM ADA BARIS DATA SPREADSHEET
+                        </td>
+                    </tr>
+                `;
+            } else {
+                sorted.forEach((item, index) => {
+                    if (item.jenis === 'pemasukan') sumPemasukan += item.jumlah;
+                    else sumPengeluaran += item.jumlah;
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-900/90 transition-colors border-b border-slate-800/60";
+                    
+                    const isIn = item.jenis === 'pemasukan';
+                    const categoryList = opsiKategori[item.jenis] || [];
+
+                    let categoryOptionsHtml = '';
+                    categoryList.forEach(opt => {
+                        const selected = opt === item.keterangan ? 'selected' : '';
+                        categoryOptionsHtml += `<option value="${opt}" ${selected}>${opt}</option>`;
+                    });
+
+                    tr.innerHTML = `
+                        <td class="p-2 text-center text-slate-500 font-orbitron text-xs">${index + 1}</td>
+                        <td class="p-2">
+                            <input type="date" value="${item.tanggal}" 
+                                class="bg-slate-950/90 border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:border-cyan-400 focus:outline-none w-full"
+                                onchange="window.updateTransactionField('${item.id}', 'tanggal', this.value)">
+                        </td>
+                        <td class="p-2">
+                            <select class="bg-slate-950/90 border border-slate-700/60 rounded px-1.5 py-1 text-[11px] font-orbitron font-bold ${isIn ? 'text-emerald-300' : 'text-rose-300'} focus:border-cyan-400 focus:outline-none w-full cursor-pointer"
+                                onchange="window.updateTransactionType('${item.id}', this.value)">
+                                <option value="pemasukan" ${isIn ? 'selected' : ''}>MANA (+)</option>
+                                <option value="pengeluaran" ${!isIn ? 'selected' : ''}>DAMAGE (-)</option>
+                            </select>
+                        </td>
+                        <td class="p-2">
+                            <select class="bg-slate-950/90 border border-slate-700/60 rounded px-2 py-1 text-xs text-cyan-200 focus:border-cyan-400 focus:outline-none w-full cursor-pointer"
+                                onchange="window.updateTransactionField('${item.id}', 'keterangan', this.value)">
+                                ${categoryOptionsHtml}
+                            </select>
+                        </td>
+                        <td class="p-2">
+                            <input type="text" value="${item.catatan || ''}" placeholder="Catatan..." 
+                                class="bg-slate-950/90 border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-300 placeholder-slate-600 focus:border-cyan-400 focus:outline-none w-full"
+                                onchange="window.updateTransactionField('${item.id}', 'catatan', this.value)">
+                        </td>
+                        <td class="p-2 text-right">
+                            <input type="number" value="${item.jumlah}" min="1" 
+                                class="bg-slate-950/90 border border-slate-700/60 rounded px-2 py-1 text-xs text-amber-300 font-orbitron font-bold text-right focus:border-amber-400 focus:outline-none w-full"
+                                onchange="window.updateTransactionField('${item.id}', 'jumlah', parseFloat(this.value) || 0)">
+                        </td>
+                        <td class="p-2 text-center">
+                            <button onclick="window.openDeleteModal('${item.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 rounded hover:bg-rose-950/50 transition-colors" title="Hapus Baris">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </td>
+                    `;
+                    spreadsheetTableBody.appendChild(tr);
+                });
+            }
+
+            /* Quick Add Row Button inside Spreadsheet */
+            const addRowTr = document.createElement('tr');
+            addRowTr.className = "bg-slate-950/40 hover:bg-slate-950/80 transition-colors border-t border-slate-800";
+            addRowTr.innerHTML = `
+                <td colspan="7" class="p-2 text-center">
+                    <button onclick="window.addSpreadsheetRow()" class="hud-button w-full py-2 bg-emerald-950/60 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 font-orbitron text-xs rounded-lg flex items-center justify-center gap-2 shadow-neon-mana transition-all">
+                        <i class="fa-solid fa-plus-circle text-sm"></i> + TAMBAH BARIS DATA BARU (REALTIME QUICK ADD)
+                    </button>
+                </td>
+            `;
+            spreadsheetTableBody.appendChild(addRowTr);
+
+            /* Formula stats calculation */
+            document.getElementById('formulaPemasukan').textContent = formatRupiah(sumPemasukan);
+            document.getElementById('formulaPengeluaran').textContent = formatRupiah(sumPengeluaran);
+            document.getElementById('formulaNet').textContent = formatRupiah(sumPemasukan - sumPengeluaran);
+            document.getElementById('formulaCount').textContent = `${sorted.length} Baris Data`;
+        };
+
+        /* Realtime Field Updates from Spreadsheet Grid */
+        window.updateTransactionField = async (id, field, value) => {
+            AudioFX.play('click');
+            const idx = transaksiData.findIndex(item => item.id === id);
+            if (idx === -1) return;
+
+            transaksiData[idx][field] = value;
+            const updatedItem = { ...transaksiData[idx] };
+
+            await saveLocalTransaction(updatedItem);
+            updateUI();
+
+            if (db && userId && !id.startsWith('trx_')) {
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'transactions', id);
+                    await updateDoc(docRef, { [field]: value });
+                } catch (err) {
+                    console.error("Gagal update cloud field:", err);
+                }
+            }
+        };
+
+        window.updateTransactionType = async (id, newJenis) => {
+            AudioFX.play('click');
+            const idx = transaksiData.findIndex(item => item.id === id);
+            if (idx === -1) return;
+
+            const defaultKet = opsiKategori[newJenis][0] || 'Lain-lain';
+            transaksiData[idx].jenis = newJenis;
+            transaksiData[idx].keterangan = defaultKet;
+            const updatedItem = { ...transaksiData[idx] };
+
+            await saveLocalTransaction(updatedItem);
+            updateUI();
+
+            if (db && userId && !id.startsWith('trx_')) {
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'transactions', id);
+                    await updateDoc(docRef, { jenis: newJenis, keterangan: defaultKet });
+                } catch (err) {
+                    console.error("Gagal update cloud jenis:", err);
+                }
+            }
+        };
+
+        window.addSpreadsheetRow = async () => {
+            AudioFX.play('income');
+            const today = new Date().toISOString().split('T')[0];
+            const newTrx = {
+                jenis: 'pemasukan',
+                keterangan: 'Gaji & Upah',
+                catatan: 'Baris baru spreadsheet',
+                jumlah: 100000,
+                tanggal: today,
+                createdAt: Date.now()
+            };
+
+            if (db && userId) {
+                try {
+                    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                    const docRef = await addDoc(colRef, newTrx);
+                    await saveLocalTransaction({ id: docRef.id, ...newTrx });
+                } catch (err) {
+                    const localItem = { id: 'trx_' + Date.now(), ...newTrx };
+                    transaksiData.push(localItem);
+                    await saveLocalTransaction(localItem);
+                    updateUI();
+                }
+            } else {
+                const localItem = { id: 'trx_' + Date.now(), ...newTrx };
+                transaksiData.push(localItem);
+                await saveLocalTransaction(localItem);
+                updateUI();
+            }
+        };
+
+        const exportToCSV = () => {
+            AudioFX.play('spreadsheet');
+            if (transaksiData.length === 0) {
+                alert('Tidak ada data transaksi untuk diexport.');
+                return;
+            }
+
+            // UTF-8 BOM for Microsoft Excel encoding compatibility
+            let csvContent = "\uFEFFTanggal,Tipe,Kategori,Catatan,Jumlah_Rp\n";
+
+            transaksiData.forEach(item => {
+                const catatanEscaped = item.catatan ? `"${item.catatan.replace(/"/g, '""')}"` : '""';
+                const row = [
+                    item.tanggal,
+                    item.jenis,
+                    `"${item.keterangan}"`,
+                    catatanEscaped,
+                    item.jumlah
+                ].join(',');
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const today = new Date().toISOString().split('T')[0];
+            link.setAttribute('href', url);
+            link.setAttribute('download', `DOMPETDR_Financial_Report_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const downloadCSVTemplate = () => {
+            AudioFX.play('click');
+            const template = "\uFEFFTanggal,Tipe,Kategori,Catatan,Jumlah_Rp\n2026-08-01,pemasukan,Gaji & Upah,Gaji Bulanan,5000000\n2026-08-02,pengeluaran,Makanan & Minuman,Makan Siang,35000\n";
+            const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `DOMPETDR_Import_Template.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const parseAndImportCSV = async (file) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const text = e.target.result;
+                    const lines = text.split(/\r\n|\n/);
+                    if (lines.length < 2) return;
+
+                    let addedCount = 0;
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+
+                        // Parse CSV line taking quotes into consideration
+                        const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+                        if (cols.length >= 4) {
+                            const tanggal = cols[0].replace(/"/g, '').trim();
+                            const jenis = cols[1].replace(/"/g, '').trim().toLowerCase();
+                            const keterangan = cols[2].replace(/"/g, '').trim();
+                            const catatan = cols.length >= 5 ? cols[3].replace(/"/g, '').trim() : '';
+                            const jumlahRaw = cols[cols.length - 1].replace(/"/g, '').trim();
+                            const jumlah = parseFloat(jumlahRaw);
+
+                            if (tanggal && (jenis === 'pemasukan' || jenis === 'pengeluaran') && keterangan && !isNaN(jumlah) && jumlah > 0) {
+                                const newTrx = {
+                                    jenis,
+                                    keterangan,
+                                    catatan,
+                                    jumlah,
+                                    tanggal,
+                                    createdAt: Date.now() + i
+                                };
+
+                                if (db && userId) {
+                                    try {
+                                        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                                        const docRef = await addDoc(colRef, newTrx);
+                                        await saveLocalTransaction({ id: docRef.id, ...newTrx });
+                                    } catch (err) {
+                                        const localItem = { id: 'trx_imp_' + Date.now() + '_' + i, ...newTrx };
+                                        transaksiData.push(localItem);
+                                        await saveLocalTransaction(localItem);
+                                    }
+                                } else {
+                                    const localItem = { id: 'trx_imp_' + Date.now() + '_' + i, ...newTrx };
+                                    transaksiData.push(localItem);
+                                    await saveLocalTransaction(localItem);
+                                }
+                                addedCount++;
+                            }
+                        }
+                    }
+
+                    AudioFX.play('income');
+                    updateUI();
+                    alert(`Berhasil mengimpor ${addedCount} baris transaksi dari CSV!`);
+                } catch (err) {
+                    console.error("Gagal membaca file CSV:", err);
+                    alert("Format file CSV tidak valid.");
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        const openSpreadsheetModal = () => {
+            AudioFX.play('spreadsheet');
+            renderSpreadsheetTable();
+            spreadsheetModal.classList.remove('hidden');
+            setTimeout(() => {
+                spreadsheetModalContent.classList.remove('scale-95');
+                spreadsheetModalContent.classList.add('scale-100');
+            }, 10);
+        };
+
+        const closeSpreadsheetModal = () => {
+            AudioFX.play('click');
+            spreadsheetModalContent.classList.remove('scale-100');
+            spreadsheetModalContent.classList.add('scale-95');
+            setTimeout(() => {
+                spreadsheetModal.classList.add('hidden');
+            }, 180);
+        };
+
+        btnOpenSpreadsheet.addEventListener('click', openSpreadsheetModal);
+        btnCloseSpreadsheet.addEventListener('click', closeSpreadsheetModal);
+        btnExportCSV.addEventListener('click', exportToCSV);
+        btnDownloadTemplate.addEventListener('click', downloadCSVTemplate);
+
+        csvFileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                parseAndImportCSV(e.target.files[0]);
+                e.target.value = '';
+            }
+        });
+
+        spreadsheetModal.addEventListener('click', (e) => {
+            if (e.target === spreadsheetModal) closeSpreadsheetModal();
+        });
+
+        // Initialize Firebase Cloud Firestore connection
+        const initCloudFirestore = async () => {
+            const statusDot = document.getElementById('cloudStatusDot');
+            const statusText = document.getElementById('cloudStatusText');
+
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser ? auth.currentUser.uid : 'anon';
+
+                if (statusText) {
+                    statusText.textContent = "CLOUD REALTIME SYNC";
+                    statusDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-ping";
+                }
+
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                onSnapshot(colRef, async (snapshot) => {
+                    const items = [];
+                    snapshot.forEach(docSnap => {
+                        items.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    transaksiData = items;
+                    await clearLocalTransactions();
+                    for (const item of items) {
+                        await saveLocalTransaction(item);
+                    }
+                    updateUI();
+                }, (error) => {
+                    console.error("Realtime listener error:", error);
+                });
+
+            } catch (err) {
+                console.error("Cloud connection failed, switching to local persistent storage:", err);
+                if (statusText) {
+                    statusText.textContent = "OFFLINE STORAGE";
+                    statusDot.className = "w-2 h-2 rounded-full bg-sky-400";
+                }
+                transaksiData = await loadLocalTransactions();
+                updateUI();
+            }
+        };
+
+        radioJenis.forEach(radio => {
+            radio.addEventListener('change', () => {
+                AudioFX.play('click');
+                updateOpsiKategori();
+            });
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const jenis = document.querySelector('input[name="jenis"]:checked').value;
+            const keterangan = document.getElementById('keterangan').value;
+            const catatan = document.getElementById('catatan').value.trim();
+            const jumlah = parseFloat(document.getElementById('jumlah').value);
+            const tanggal = document.getElementById('tanggal').value;
+
+            if (!keterangan || isNaN(jumlah) || jumlah <= 0 || !tanggal) return;
+
+            const transaksiBaru = {
+                jenis,
+                keterangan,
+                catatan,
+                jumlah,
+                tanggal,
+                createdAt: Date.now()
+            };
+
+            AudioFX.play(jenis === 'pemasukan' ? 'income' : 'expense');
+
+            document.getElementById('catatan').value = '';
+            document.getElementById('jumlah').value = '';
+
+            if (db && userId) {
+                try {
+                    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                    const docRef = await addDoc(colRef, transaksiBaru);
+                    await saveLocalTransaction({ id: docRef.id, ...transaksiBaru });
+                } catch (err) {
+                    console.error("Gagal menyimpan ke Cloud, menyimpan lokal:", err);
+                    const localItem = { id: 'trx_' + Date.now(), ...transaksiBaru };
+                    transaksiData.push(localItem);
+                    await saveLocalTransaction(localItem);
+                    updateUI();
+                }
+            } else {
+                const localItem = { id: 'trx_' + Date.now(), ...transaksiBaru };
+                transaksiData.push(localItem);
+                await saveLocalTransaction(localItem);
+                updateUI();
+            }
+        });
+
+        // Filter Buttons Logic
+        const filterBtns = {
+            all: document.getElementById('filterAll'),
+            pemasukan: document.getElementById('filterIn'),
+            pengeluaran: document.getElementById('filterOut')
+        };
+
+        Object.keys(filterBtns).forEach(key => {
+            filterBtns[key].addEventListener('click', () => {
+                AudioFX.play('click');
+                activeFilter = key;
+                Object.values(filterBtns).forEach(btn => {
+                    btn.className = 'filter-btn flex-1 py-1 rounded text-center text-slate-400 hover:text-cyan-300';
+                });
+                filterBtns[key].className = 'filter-btn flex-1 py-1 rounded text-center text-cyan-300 bg-cyan-950/80 border border-cyan-700/60 font-bold';
+                updateUI();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            updateUI();
+        });
+
+        // Audio Toggle Switch
+        const btnAudioToggle = document.getElementById('btnAudioToggle');
+        const audioIcon = document.getElementById('audioIcon');
+        btnAudioToggle.addEventListener('click', () => {
+            const isNowOn = AudioFX.toggle();
+            audioIcon.className = isNowOn ? "fa-solid fa-volume-high text-base" : "fa-solid fa-volume-xmark text-base text-rose-400";
+            if (isNowOn) AudioFX.play('click');
+        });
+
+        // Modal Logic
+        const showModal = () => {
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95');
+                modalContent.classList.add('scale-100');
+            }, 10);
+        };
+
+        const hideModal = () => {
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                idToDelete = null;
+                isDeleteAll = false;
+            }, 180);
+        };
+
+        window.openDeleteModal = (id) => {
+            AudioFX.play('click');
+            idToDelete = id;
+            isDeleteAll = false;
+            document.getElementById('modalTitle').textContent = 'DISCARD TRANSAKSI';
+            document.getElementById('modalMessage').textContent = 'Apakah Anda yakin ingin menghapus data transaksi ini dari quest log?';
+            showModal();
+        };
+
+        btnHapusSemua.addEventListener('click', () => {
+            AudioFX.play('click');
+            isDeleteAll = true;
+            document.getElementById('modalTitle').textContent = 'CLEAR ALL LOG DATA';
+            document.getElementById('modalMessage').textContent = 'PERINGATAN! Seluruh riwayat transaksi akan dihapus dari sistem vault.';
+            showModal();
+        });
+
+        btnCancelDelete.addEventListener('click', () => {
+            AudioFX.play('click');
+            hideModal();
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) hideModal();
+        });
+
+        btnConfirmDelete.addEventListener('click', async () => {
+            AudioFX.play('delete');
+            
+            if (db && userId) {
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                if (isDeleteAll) {
+                    try {
+                        const snapshot = await getDocs(colRef);
+                        const deletePromises = snapshot.docs.map(docSnap => 
+                            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'transactions', docSnap.id))
+                        );
+                        await Promise.all(deletePromises);
+                        await clearLocalTransactions();
+                    } catch (err) {
+                        console.error("Gagal menghapus semua data Cloud, membersihkan lokal:", err);
+                        await clearLocalTransactions();
+                        transaksiData = [];
+                        updateUI();
+                    }
+                } else if (idToDelete) {
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'transactions', idToDelete));
+                        await deleteLocalTransaction(idToDelete);
+                    } catch (err) {
+                        console.error("Gagal menghapus dokumen Cloud, menghapus lokal:", err);
+                        await deleteLocalTransaction(idToDelete);
+                        transaksiData = transaksiData.filter(item => item.id !== idToDelete);
+                        updateUI();
+                    }
+                }
+            } else {
+                if (isDeleteAll) {
+                    await clearLocalTransactions();
+                    transaksiData = [];
+                } else if (idToDelete) {
+                    await deleteLocalTransaction(idToDelete);
+                    transaksiData = transaksiData.filter(item => item.id !== idToDelete);
+                }
+                updateUI();
+            }
+
+            hideModal();
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+            document.getElementById('tanggal').valueAsDate = new Date();
+            initCanvas();
+            updateOpsiKategori();
+            
+            // Initial load from local IndexedDB first for instant UI response
+            transaksiData = await loadLocalTransactions();
+            updateUI();
+
+            // Connect to Cloud
+            initCloudFirestore();
+        });
+    </script>
+</body>
+</html>
